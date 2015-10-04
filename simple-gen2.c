@@ -114,15 +114,19 @@ int main(int argc, char ** argv)
 	assignLittleEndian4(hdr->subchunk2Size, dataSize);
 
 	unsigned char *p = &hdr->data[0];
-	for (int i=0; i<numSamples; i++) {
+	for(int i=0; i<numSamples; i++) {
 		signed short value = 32767*sin(3.1415*freq*i/sampleRate);
-		assignLittleEndian2signed(p, value);	
-		p+=2;	
+
+		// In this simple version, just write repeated samples for each channel
+		for(int j=1; j<=numChannels;j++) {
+			assignLittleEndian2signed(p, value);	
+			p+=sizeof(value);
+		}	
 	}
 
 	// Write file to disk
 	FILE *f = fopen(outputFile, "w+");
-	if (f==NULL) {
+	if(f==NULL) {
 		printf("Could not create file\n");
 		perror("fopen");
 		exit(1);
@@ -132,4 +136,5 @@ int main(int argc, char ** argv)
 	printf("%d bytes written: %lu bytes header + %u bytes samples.\n", fileSize, sizeof(WaveHeader)-1, dataSize);
 
 	fclose(f);
+	return(0);
 }
