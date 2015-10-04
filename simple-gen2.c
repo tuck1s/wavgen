@@ -62,23 +62,29 @@ void assignLittleEndian2(unsigned char *p, unsigned short value) {
 int main(int argc, char ** argv) 
 {
 	if (argc <5) {
-		printf("Usage: %s frequency(Hz) seconds channels outputFile\n", argv[0]);
+		printf("Usage: %s frequency(Hz) seconds channels sampleRate outputFile\n", argv[0]);
 		exit(1);
 	}
 
 	int freq;
 	int secs;
-	unsigned int numChannels;
+	unsigned int numChannels, sampleRate;
 	char outputFile[256];			// Allow for long filenames.  Note this is somewhat unsafe as not checkign for buffer overflow
 
 	sscanf(argv[1], "%d", &freq);
 	sscanf(argv[2], "%d", &secs);
 	sscanf(argv[3], "%d", &numChannels);
-	sscanf(argv[4], "%s", outputFile);
+	sscanf(argv[4], "%d", &sampleRate);
+	sscanf(argv[5], "%s", outputFile);
 
-	printf("Generating: frequency %d Hz, duration %d seconds, %d identical channels, outputFile=%s\n", freq, secs, numChannels, outputFile);
 
-	unsigned int sampleRate = 44100;
+	if(sampleRate <8000 || sampleRate >192000) {
+		printf("SampleRate should be between 8000 and 192000.  Stopping.\n");
+		exit(1);
+	}
+
+	printf("Generating: frequency %d Hz, duration %d seconds, %d identical channels, Sample rate %d/sec, outputFile=%s\n", freq, secs, numChannels, sampleRate, outputFile);
+
 	unsigned int bitsPerSample = 16;
 	unsigned int bytesPerSample = bitsPerSample/8;
 	unsigned int numSamples = secs * sampleRate;
