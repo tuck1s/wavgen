@@ -27,20 +27,36 @@ typedef struct WaveHeader {
 	unsigned char data[1];         // little endian
 } WaveHeader;
 
-void assignLittleEndian4(unsigned char *dest, unsigned int value) {
-	dest[0] = value & 0xFF;
-	dest[1] = (value >> 8) & 0xFF;
-	dest[2] = (value >> 16) & 0xFF;
-	dest[3] = (value >> 24) & 0xFF;
+void assignLittleEndian4(unsigned char *p, unsigned int value) {
+	*p++ = value & 0xFF;
+	value >>= 8;
+	*p++ = value & 0xFF;
+	value >>= 8;
+	*p++ = value & 0xFF;
+	value >>= 8;
+	*p++ = value & 0xFF;
+}
+
+void assignLittleEndian4str(unsigned char *p, char *s) {
+	*p++ = *s++;		// Can just copy simple 8-bit chars without realignment
+	*p++ = *s++;
+	*p++ = *s++;
+	*p++ = *s++;
 }
 
 /*
- * Updated version to write out samples in little-endian format no matter what this machine's architecture
- * Assumes 16-bit signed values currently
+ * Assumes 16-bit signed values for samples currently - would need extensions to work with larger sample sizes
  */
 void assignLittleEndian2signed(unsigned char *p, signed short value) {
-	p[0] = (unsigned char)(value&0xff);
-	p[1] = (unsigned char)((value>>8)&0xff);
+	*p++ = value & 0xFF;
+	value >>= 8;
+	*p++ = value & 0xFF;
+}
+
+void assignLittleEndian2(unsigned char *p, unsigned short value) {
+	*p++ = value & 0xFF;
+	value >>= 8;
+	*p++ = value & 0xFF;
 }
 
 int main(int argc, char ** argv) 
@@ -64,39 +80,44 @@ int main(int argc, char ** argv)
 
 	unsigned int sampleRate = 44100;
 	unsigned int bitsPerSample = 16;
+	unsigned int bytesPerSample = bitsPerSample/8;
 	unsigned int numSamples = secs * sampleRate;
-	unsigned int dataSize = numSamples * numChannels * (bitsPerSample/8);
-	unsigned int byteRate = numChannels * sampleRate * (bitsPerSample/8);
-
+	unsigned int dataSize = numSamples * numChannels * bytesPerSample;
+	unsigned int byteRate = numChannels * sampleRate * bytesPerSample;
 	
 	// Subtract 1 for the data[1] in the header
 	unsigned int fileSize = sizeof(WaveHeader) - 1 + dataSize;  
 
-	printf("fileSize = %d\n", fileSize);
-
 	// Allocate memory for header and data
 	WaveHeader * hdr = (WaveHeader *) malloc(fileSize);		
 
-	// Fill up header
-	hdr->chunkID[0]='R'; hdr->chunkID[1]='I'; hdr->chunkID[2]='F'; hdr->chunkID[3]='F';
-	assignLittleEndian4(hdr->chunkSize, fileSize - 8);
-	hdr->format[0] = 'W'; hdr->format[1] = 'A'; hdr->format[2] = 'V'; hdr->format[3] = 'E';
-	hdr->subchunk1ID[0]='f'; hdr->subchunk1ID[1]='m'; hdr->subchunk1ID[2]='t'; hdr->subchunk1ID[3]=' ';
-	assignLittleEndian4( hdr->subchunk1Size,16);
-	hdr->audioFormat[0] = 1; hdr->audioFormat[1]=0;
-	hdr->numChannels[0] = numChannels; hdr->numChannels[1]=0;
+	// Start file with RIFF header
+
+	assignLittleEndian4str(hdr->chunkID, "RIFF");
+	assignLittleEndian4(hdr->chunkSize, fileSize - 8);			// chunkID and chunkSize longwords don't count towards the chunkSize itself
+
+	// Subchunk 1 - WAVE header
+
+	assignLittleEndian4str(hdr->format, "WAVE");
+	assignLittleEndian4str(hdr->subchunk1ID, "fmt ");
+	assignLittleEndian4(hdr->subchunk1Size,16);					// Header is always 16 bytes
+	assignLittleEndian2(hdr->audioFormat, 1);					// PCM = 1
+	assignLittleEndian2(hdr->numChannels, numChannels);
 	assignLittleEndian4(hdr->sampleRate, sampleRate);
 	assignLittleEndian4(hdr->byteRate, byteRate);
+	assignLittleEndian2(hdr->blockAlign, numChannels * bytesPerSample);
+	assignLittleEndian2(hdr->bitsPerSample, bitsPerSample);
 
-	hdr->blockAlign[0] = numChannels * bitsPerSample/8; hdr->blockAlign[1]=0;
-	hdr->bitsPerSample[0] = bitsPerSample; hdr->bitsPerSample[1]=0;
-	hdr->subchunk2ID[0]='d'; hdr->subchunk2ID[1]='a'; hdr->subchunk2ID[2]='t'; hdr->subchunk2ID[3]='a';
+	// Subchunk 2 - sample data
+
+	assignLittleEndian4str(hdr->subchunk2ID, "data");
 	assignLittleEndian4(hdr->subchunk2Size, dataSize);
 
-	// Generate data
+	unsigned char *p = &hdr->data[0];
 	for (int i=0; i<numSamples; i++) {
 		signed short value = 32767*sin(3.1415*freq*i/sampleRate);
-		assignLittleEndian2signed(&hdr->data[i], value);		
+		assignLittleEndian2signed(p, value);	
+		p+=2;	
 	}
 
 	// Write file to disk
